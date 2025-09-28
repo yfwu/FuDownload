@@ -1,0 +1,39 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python Embedded - Don't upload to GitHub
+python/
+python-embed.zip
+get-pip.py
+
+# Logs and downloads
+logs/
+downloads/
+*.log
+
+# Temporary files
+*.tmp
+.temp/
+*.bak
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

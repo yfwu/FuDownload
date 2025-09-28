@@ -1,0 +1,60 @@
+# DICOM Download Tool Configuration
+# Edit this file to add or modify DICOM server connections
+
+settings:
+  query_timeout: 30          # Timeout for C-FIND queries (seconds)
+  download_timeout: 120      # Timeout for C-MOVE downloads (seconds)
+  max_retries: 2            # Number of retries before skipping
+  log_level: INFO           # Log level: DEBUG, INFO, WARNING, ERROR
+
+# Define your DICOM servers here
+servers:
+  LK:
+    port: 4100
+    ip: "10.30.191.120"
+    ae_title: "GEPACS"
+    description: "LK PACS Server"
+
+  LK2:
+    port: 104
+    ip: "10.30.190.52"
+    ae_title: "CGHLEA3"
+    description: "LK PACS Server LTA"
+
+  TY:
+    port: 4100
+    ip: "10.31.191.120"
+    ae_title: "GEPACS"
+    description: "TY PACS Server"
+
+  TY2:
+    port: 104
+    ip: "10.31.191.52"
+    ae_title: "CGHHEA2"
+    description: "TY PACS Server LTA"
+
+  # Add more servers as needed:
+  # SERVER_NAME:
+  #   port: 104
+  #   ip: "xxx.xxx.xxx.xxx"
+  #   ae_title: "SERVER_AE_TITLE"
+  #   description: "Description"
+
+# Local Application Entity settings
+local_ae:
+  ae_title: "GEPACS"
+  port: 11120
+  storage_dir: "downloads"
+
+# C-MOVE Destination Configuration
+# This is where the DICOM files will be sent via C-MOVE
+move_destination:
+  ae_title: "LQC6"          # Destination AE Title (e.g., RA600, LQC6, GEPACS)
+  # Common RA600 storage paths:
+  # Windows: "C:\\RA600\\DATABASE\\LOCAL\\general"
+  # Mac/Linux: "/path/to/storage"
+  storage_path: "C:\\RA600\\DATABASE\\LOCAL\\general"
+
+  # Alternative destinations (uncomment and modify as needed):
+  # ae_title: "RA600"
+  # storage_path: "D:\\DICOM\\Storage"

@@ -1,0 +1,72 @@
+================================================================================
+                     DICOM DOWNLOAD TOOL - INSTALLATION NOTES
+================================================================================
+
+WHAT'S INCLUDED
+---------------
+This package contains everything needed to run the DICOM Download Tool on Windows:
+
+1. Python embedded (python/ folder) - Windows Python 3.11 runtime
+2. All required libraries (lib/ folder) - pynetdicom, pydicom, PyYAML
+3. Main application (dicom_downloader.py)
+4. Configuration files (config.yaml, queries.csv)
+5. Windows launcher (run.bat)
+6. Documentation (README.txt)
+
+HOW TO USE ON WINDOWS
+---------------------
+1. Copy/unzip this entire FuDownload folder to your Windows workstation
+2. The tool should work immediately using run.bat
+3. If packages don't load, run setup_windows.bat once to install them
+
+NO INTERNET REQUIRED
+--------------------
+All dependencies are included. This package will work on computers without:
+- Internet access
+- Python installation
+- Administrator privileges (in most cases)
+
+FOLDER STRUCTURE AFTER UNZIP
+----------------------------
+FuDownload/
+  ├── python/           <- Embedded Python for Windows
+  ├── lib/              <- All Python packages
+  ├── downloads/        <- Downloaded DICOM files will go here
+  ├── logs/             <- Application logs
+  ├── config.yaml       <- Server configuration (EDIT THIS)
+  ├── queries.csv       <- Patient list for batch processing
+  ├── dicom_downloader.py <- Main application
+  ├── run.bat           <- Click this to run the tool
+  └── setup_windows.bat <- Run this if packages fail to load
+
+CONFIGURATION REQUIRED
+----------------------
+Before using, edit config.yaml with your PACS server details:
+- Server IP addresses
+- AE titles
+- Port numbers
+
+QUICK START
+-----------
+1. Edit config.yaml with your server information
+2. Edit queries.csv with patient list (see CSV format below) OR
+3. Double-click run.bat to start in interactive mode
+
+CSV FORMAT FOR queries.csv:
+- NO header row required - data starts on first line
+- 4 columns required (comma-separated):
+  Column 1: PatientID
+  Column 2: Date (YYYY-MM-DD format)
+  Column 3: Modality (CT, MR, US, etc.)
+  Column 4: Server name (must match config.yaml)
+- Lines starting with # are comments (ignored)
+- Example: 8318169, 2019-05-20, CT, LK
+
+TROUBLESHOOTING
+---------------
+If the tool doesn't start:
+1. Run setup_windows.bat once
+2. Check that python/ folder contains python.exe
+3. Verify all files were extracted correctly
+
+================================================================================

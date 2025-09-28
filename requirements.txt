@@ -1,0 +1,7 @@
+# DICOM Download Tool Requirements
+# These packages are needed for the tool to work
+# They are already included in the lib/ folder
+
+pynetdicom==3.0.4
+pydicom==3.0.1
+pyyaml==6.0.2

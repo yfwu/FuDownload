@@ -1,0 +1,86 @@
+===============================================
+DICOM Download Tool - Troubleshooting Guide
+===============================================
+
+COMMON ISSUES AND SOLUTIONS
+---------------------------
+
+1. C-MOVE succeeds but no files are received
+   Problem: The PACS server receives the C-MOVE request but doesn't send files back.
+
+   Solutions:
+   a) Verify PACS Configuration:
+      - The PACS must have your local AE Title (LQC6) configured as a valid destination
+      - Your workstation's IP address must be allowed in the PACS configuration
+      - The port (11120) must be accessible (check Windows Firewall)
+
+   b) Check Network Configuration:
+      - Ensure port 11120 is open in Windows Firewall:
+        1. Open Windows Defender Firewall
+        2. Click "Advanced settings"
+        3. Add Inbound Rule for port 11120 (TCP)
+
+   c) Verify AE Title matching:
+      - The PACS must know your AE Title: LQC6
+      - Contact your PACS administrator to add:
+        * AE Title: LQC6
+        * IP: Your workstation's IP
+        * Port: 11120
+
+2. "No matching studies found"
+   - Verify the Patient ID format (might need leading zeros)
+   - Check if date format is correct (YYYY-MM-DD)
+   - Modality should be exact match (CT, MR, etc.)
+
+3. "Association rejected"
+   - Your AE Title might not be configured on the PACS
+   - Contact PACS administrator to whitelist your AE Title
+
+4. Timeout errors
+   - Default timeout is 120 seconds for downloads
+   - For large studies, increase timeout:
+     run.bat --timeout 300 --batch queries.csv
+
+5. Windows path errors
+   - Ensure no special characters in Patient IDs
+   - The script automatically removes invalid characters
+
+PACS CONFIGURATION CHECKLIST
+----------------------------
+Ask your PACS administrator to configure:
+
+For LK Server (10.30.190.52):
+- Add destination AE:
+  * AE Title: LQC6
+  * IP Address: [Your workstation IP]
+  * Port: 11120
+  * Transfer Syntax: Implicit VR Little Endian
+
+For TY Server (10.31.191.52):
+- Add destination AE:
+  * AE Title: LQC6
+  * IP Address: [Your workstation IP]
+  * Port: 11120
+  * Transfer Syntax: Implicit VR Little Endian
+
+TESTING CONNECTION
+-----------------
+1. First test C-FIND (query):
+   run.bat --id TEST001 --date 2019-01-01 --modality CT --server LK
+
+2. If query works but download fails:
+   - It's likely a PACS configuration issue
+   - The PACS needs to know where to send the files
+
+LOG FILES
+---------
+Check the logs folder for detailed error messages:
+- logs\dicom_download_YYYYMMDD_HHMMSS.log
+
+CONTACT SUPPORT
+--------------
+If issues persist, provide:
+1. The log file from the logs folder
+2. The exact command you're running
+3. Your workstation's IP address
+4. Screenshot of any error messages

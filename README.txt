@@ -1,111 +1,132 @@
 ================================================================================
-                        DICOM DOWNLOAD TOOL - README
+                        DICOM 下載工具 - README
 ================================================================================
 
-OVERVIEW
+概述
+----
+本工具透過病人 ID、檢查日期與模態，從 PACS 伺服器下載 DICOM 影像。
+支援多伺服器，並包含逾時處理以跳過問題下載。
+
+
+安裝
+----
+1. 將 FuDownload 資料夾解壓縮到 Windows 電腦任一位置
+2. 無需安裝，解壓後即可使用
+3. 所有 Python 相依套件已包含在封裝內
+
+
+設定
+----
+1. 編輯 config.yaml 以新增 DICOM 伺服器：
+   - ae_title: PACS 伺服器的 AE Title
+   - ip: 伺服器 IP
+   - port: 伺服器連接埠（通常為 11112）
+   - description: 伺服器友善名稱
+
+2. 視需要調整 config.yaml 內逾時設定：
+   - query_timeout: C-FIND 查詢最大時間（預設 30 秒）
+   - download_timeout: C-MOVE 下載最大時間（預設 120 秒）
+
+
+使用方式
 --------
-This tool downloads DICOM images from PACS servers using patient ID, study date,
-and modality. It supports multiple servers and includes timeout handling to skip
-problematic downloads.
 
-
-INSTALLATION
-------------
-1. Unzip the FuDownload folder to any location on your Windows computer
-2. No installation required - the tool is ready to use immediately
-3. All Python dependencies are included in the package
-
-
-CONFIGURATION
--------------
-1. Edit config.yaml to add your DICOM servers:
-   - ae_title: The Application Entity title of the PACS server
-   - ip: Server IP address
-   - port: Server port (usually 11112)
-   - description: Friendly name for the server
-
-2. Adjust timeout settings in config.yaml if needed:
-   - query_timeout: Maximum time for C-FIND queries (default: 30 seconds)
-   - download_timeout: Maximum time for C-MOVE downloads (default: 120 seconds)
-
-
-USAGE
------
-
-1. BATCH PROCESSING (Recommended)
-   Edit queries.csv with your patient list, then run:
+1. 批次處理（建議）
+   編輯 queries.csv 病例清單後執行：
    > run.bat --batch queries.csv
 
-   CSV Format (NO header row required):
-   Column 1: PatientID (e.g., 8318169 or PAT001)
-   Column 2: Date in YYYY-MM-DD format (e.g., 2025-09-22)
-   Column 3: Modality (e.g., CT, MR, US)
-   Column 4: Server name from config.yaml (e.g., LK, LNK)
+   CSV 格式（建議有標題列，可省略）：
+   標題列（建議）：PatientID,StudyDate,Modality,Server
+   第 1 欄：PatientID（例如 8318169 或 PAT001）
+   第 2 欄：日期格式 YYYY-MM-DD（例如 2025-09-22）
+   第 3 欄：Modality（例如 CT, MR, US）
+   第 4 欄：config.yaml 內的伺服器名稱（例如 LK, LNK）
 
-   Examples:
+   範例：
    8318169, 2019-05-20, CT, LK
    PAT001, 2025-09-22, MR, LNK
    12345, 2025-09-21, US, LK
 
-   Note: Lines starting with # are treated as comments and ignored
+   注意：以 # 開頭的行會視為註解並忽略
 
 
-2. SINGLE QUERY
+2. 批次 + 傳輸包裝（分批下載、壓縮、傳輸）
+   依病例數分批下載（預設每批 20 筆），每批完成後：
+   1) 將 GENERAL 內所有資料夾壓成 zip
+   2) 刪除 GENERAL 內原始資料
+   3) 透過 FuTransfer 傳送 zip
+   4) 傳送成功後刪除 zip，繼續下一批
+
+   執行方式：
+   > run_with_transfer.bat queries.csv --transfer-server 192.168.1.100
+   > run_with_transfer.bat C:\case_lists --transfer-server 192.168.1.100
+
+   說明：
+   - FuTransfer 預設位於 C:\FuTransfer（可用 --transfer-root 指定）
+   - GENERAL 路徑預設取自 config.yaml 的 move_destination.storage_path
+   - 其他參數會直接傳給 dicom_downloader（例如 --timeout 180）
+   - 每批大小可用 --batch-size 變更（例如 --batch-size 20）
+   - Zip 暫存資料夾預設為 transfer_zips（可用 --zip-root 指定）
+   - 成功傳輸後會刪除 zip（可用 --keep-zip 保留）
+   - 可用 --no-clear 跳過清空 GENERAL（不建議）
+
+
+3. 單筆查詢
    > run.bat --id PAT001 --date 2025-09-22 --modality CT --server LNK
 
 
-3. INTERACTIVE MODE
+4. 互動模式
    > run.bat
-   Follow the prompts to enter query details
+   依提示輸入查詢條件
 
 
-4. ADVANCED OPTIONS
-   --timeout 180     Override download timeout (in seconds)
-   --debug          Enable detailed debug logging
-   --config alt.yaml Use alternative config file
+5. 進階選項
+   --timeout 180     覆寫下載逾時（秒）
+   --debug          啟用詳細除錯日誌
+   --config alt.yaml 使用替代設定檔
 
 
-OUTPUT
-------
-- Downloaded DICOM files are saved in: downloads\SERVER\DATE_PATIENTID_MODALITY\
-- Logs are saved in: logs\
-- Failed downloads report: failed_downloads_TIMESTAMP.txt
+輸出
+----
+- 下載後的 DICOM 會儲存在：downloads\SERVER\DATE_PATIENTID_MODALITY\
+- 日誌儲存在：logs\
+- 下載失敗報告：failed_downloads_TIMESTAMP.txt
 
 
-TROUBLESHOOTING
----------------
-1. Connection Failed:
-   - Verify server IP and port in config.yaml
-   - Check network connectivity
-   - Ensure PACS server has your AE title configured
+疑難排解
+--------
+1. 連線失敗：
+   - 確認 config.yaml 內 IP 與 port
+   - 檢查網路連線
+   - 確認 PACS 伺服器已設定你的 AE Title
 
-2. No Studies Found:
-   - Verify patient ID format matches PACS system
-   - Check date format (YYYY-MM-DD)
-   - Confirm modality abbreviation (CT, MR, MG, etc.)
+2. 查無資料：
+   - 確認病人 ID 格式符合 PACS
+   - 確認日期格式（YYYY-MM-DD）
+   - 確認模態縮寫（CT, MR, MG 等）
 
-3. Download Timeout:
-   - Large studies may need longer timeout (use --timeout option)
-   - Check network speed
-   - Verify PACS server performance
+3. 下載逾時：
+   - 大型檢查可提高逾時（使用 --timeout）
+   - 檢查網路速度
+   - 確認 PACS 伺服器效能
 
-4. Missing Files:
-   - Check failed_downloads report for details
-   - Verify sufficient disk space
-   - Check folder permissions
-
-
-SERVER CONFIGURATION
---------------------
-Your PACS administrator needs to:
-1. Add "DICOM_DOWNLOADER" as an allowed AE title
-2. Configure it to accept connections from your IP
-3. Enable Query/Retrieve services
+4. 檔案缺漏：
+   - 查看 failed_downloads 報告
+   - 確認磁碟空間足夠
+   - 檢查資料夾權限
 
 
-ADDING NEW SERVERS
-------------------
-Edit config.yaml and add new server entry:
+伺服器設定
+----------
+PACS 管理者需要：
+1. 將 "DICOM_DOWNLOADER" 加入允許的 AE Title
+2. 設定允許從你的 IP 連線
+3. 啟用 Query/Retrieve 服務
+
+
+新增伺服器
+----------
+編輯 config.yaml 並加入新伺服器：
 
 servers:
   NEW_SERVER:
@@ -115,42 +136,42 @@ servers:
     description: "New Hospital PACS"
 
 
-LOG FILES
----------
-Logs contain:
-- Connection attempts
-- Query parameters
-- Download progress
-- Error messages
-- Timeout events
+日誌檔案
+--------
+日誌內容包含：
+- 連線嘗試
+- 查詢參數
+- 下載進度
+- 錯誤訊息
+- 逾時事件
 
-Check logs in the logs\ folder for debugging.
-
-
-FAILED DOWNLOADS REPORT
------------------------
-After each run, a report is generated listing:
-- Successfully downloaded studies
-- Failed downloads with reasons
-- Timeout failures for manual handling
-- Overall success rate
+除錯時可在 logs\ 資料夾查看日誌。
 
 
-NOTES
------
-- The tool automatically retries failed connections (configurable)
-- Downloads that timeout after 2 minutes are skipped
-- All DICOM files are saved with their SOP Instance UID
-- The tool supports CT, MR, MG, and other DICOM modalities
+下載失敗報告
+------------
+每次執行後會產生報告，內容包含：
+- 成功下載的檢查
+- 失敗下載與原因
+- 逾時失敗（供人工處理）
+- 整體成功率
 
 
-SUPPORT
--------
-For issues:
-1. Check the log files in logs\ folder
-2. Review the failed_downloads report
-3. Verify server configuration with PACS administrator
-4. Ensure network connectivity
+備註
+----
+- 連線失敗會自動重試（可於設定檔調整）
+- 下載逾時超過 2 分鐘會被略過
+- 所有 DICOM 皆以 SOP Instance UID 命名儲存
+- 支援 CT、MR、MG 等 DICOM 模態
+
+
+支援
+----
+如有問題：
+1. 檢查 logs\ 資料夾內的日誌
+2. 查看 failed_downloads 報告
+3. 與 PACS 管理者確認伺服器設定
+4. 確認網路連線
 
 
 ================================================================================

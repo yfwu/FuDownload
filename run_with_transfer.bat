@@ -1,6 +1,5 @@
 @echo off
-REM DICOM Download Tool - Windows Launcher
-REM This batch file runs the DICOM downloader with embedded Python
+REM DICOM Download + FuTransfer Wrapper - Windows Launcher
 
 SET SCRIPT_DIR=%~dp0
 REM Remove trailing backslash for consistent path handling
@@ -22,14 +21,15 @@ IF EXIST "%SCRIPT_DIR%\python\python.exe" (
     exit /b 1
 )
 
-REM Create logs directory if it doesn't exist
-IF NOT EXIST "%SCRIPT_DIR%\logs" mkdir "%SCRIPT_DIR%\logs"
-
-REM Run the DICOM downloader with all command line arguments
-"%PYTHON_EXE%" "%SCRIPT_DIR%\dicom_downloader.py" %*
+REM Run the wrapper with all command line arguments
+"%PYTHON_EXE%" "%SCRIPT_DIR%\batch_transfer_wrapper.py" %*
 
 IF ERRORLEVEL 1 (
     echo.
-    echo Error occurred while running the script.
-    echo Please check the logs folder for details.
+    echo Error occurred while running the wrapper.
+    echo Please check the output above for details.
 )
+
+echo.
+echo Press any key to exit...
+pause > nul

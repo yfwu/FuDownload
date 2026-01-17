@@ -1,5 +1,5 @@
 @echo off
-REM DICOM Download + FuTransfer Wrapper - Windows Launcher
+REM DICOM Download + FuTransfer Wrapper (FuTransfer v2) - Windows Launcher
 
 SET SCRIPT_DIR=%~dp0
 REM Remove trailing backslash for consistent path handling
@@ -17,8 +17,14 @@ IF EXIST "%SCRIPT_DIR%\python\python.exe" (
 ) ELSE (
     echo ERROR: Embedded Python not found!
     echo Please ensure the python folder is in the same directory as this script.
-    pause
     exit /b 1
+)
+
+IF "%~1"=="" (
+    echo.
+    echo Usage: %~nx0 [CSV or folder] --transfer-server IP [options]
+    echo Run "%~nx0 --help" for full options.
+    echo.
 )
 
 REM Run the wrapper with all command line arguments
@@ -31,5 +37,3 @@ IF ERRORLEVEL 1 (
 )
 
 echo.
-echo Press any key to exit...
-pause > nul

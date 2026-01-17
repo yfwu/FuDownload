@@ -53,7 +53,8 @@ QUICK START
 3. Double-click run.bat to start in interactive mode
 
 CSV FORMAT FOR queries.csv:
-- NO header row required - data starts on first line
+- Header row recommended but optional
+- Recommended header: PatientID,StudyDate,Modality,Server
 - 4 columns required (comma-separated):
   Column 1: PatientID
   Column 2: Date (YYYY-MM-DD format)

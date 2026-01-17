@@ -279,20 +279,76 @@ class DICOMDownloader:
         """Process batch queries from CSV file"""
         self.logger.info(f"Processing batch file: {csv_file}")
 
+        def normalize_key(key: str) -> str:
+            return ''.join(key.split()).lower()
+
+        def get_field(row: Dict, *candidates: str) -> Optional[str]:
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                value = row.get(candidate)
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+            return None
+
         try:
-            with open(csv_file, 'r') as f:
-                reader = csv.reader(f, skipinitialspace=True)
-                for row in reader:
-                    # Skip comments and empty lines
-                    if not row or row[0].startswith('#'):
-                        continue
+            with open(csv_file, 'r', newline='') as f:
+                first_line = f.readline()
+                f.seek(0)
+                header_line = normalize_key(first_line.lstrip('\ufeff'))
+                has_header = any(token in header_line for token in (
+                    'patientid', 'patient_id', 'studydate', 'study_date', 'date', 'modality', 'server'
+                ))
 
-                    if len(row) != 4:
-                        self.logger.warning(f"Invalid row format: {row}")
-                        continue
+                if has_header:
+                    reader = csv.DictReader(f)
+                    normalized_fields = {}
+                    for field in reader.fieldnames or []:
+                        if field is None:
+                            continue
+                        normalized_fields[normalize_key(field)] = field
 
-                    patient_id, study_date, modality, server = [x.strip() for x in row]
-                    self.process_query_with_inline_server(patient_id, study_date, modality, server)
+                    for row in reader:
+                        if not row:
+                            continue
+                        raw_patient = get_field(
+                            row,
+                            normalized_fields.get('patientid'),
+                            normalized_fields.get('patient_id'),
+                            normalized_fields.get('patient'),
+                            normalized_fields.get('id')
+                        )
+                        if raw_patient and raw_patient.startswith('#'):
+                            continue
+
+                        patient_id = raw_patient
+                        study_date = get_field(
+                            row,
+                            normalized_fields.get('studydate'),
+                            normalized_fields.get('study_date'),
+                            normalized_fields.get('date')
+                        )
+                        modality = get_field(row, normalized_fields.get('modality'))
+                        server = get_field(row, normalized_fields.get('server'))
+
+                        if not all([patient_id, study_date, modality, server]):
+                            self.logger.warning(f"Skipping row with missing fields: {row}")
+                            continue
+
+                        self.process_query_with_inline_server(patient_id, study_date, modality, server)
+                else:
+                    reader = csv.reader(f, skipinitialspace=True)
+                    for row in reader:
+                        # Skip comments and empty lines
+                        if not row or str(row[0]).strip().startswith('#'):
+                            continue
+
+                        if len(row) < 4:
+                            self.logger.warning(f"Invalid row format: {row}")
+                            continue
+
+                        patient_id, study_date, modality, server = [x.strip() for x in row[:4]]
+                        self.process_query_with_inline_server(patient_id, study_date, modality, server)
 
         except Exception as e:
             self.logger.error(f"Error processing batch file: {e}")

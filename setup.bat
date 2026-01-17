@@ -22,7 +22,6 @@ IF EXIST "%SCRIPT_DIR%\python\python.exe" (
     echo   run.bat --batch queries.csv - Batch processing
     echo   run.bat --list-servers     - List configured servers
     echo   run.bat --help             - Show all options
-    pause
     exit /b 0
 )
 
@@ -31,7 +30,6 @@ powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.Secur
 
 IF ERRORLEVEL 1 (
     echo ERROR: Failed to download Python. Please check your internet connection.
-    pause
     exit /b 1
 )
 
@@ -40,7 +38,6 @@ powershell -Command "Expand-Archive -Path 'python-embed.zip' -DestinationPath 'p
 
 IF ERRORLEVEL 1 (
     echo ERROR: Failed to extract Python archive.
-    pause
     exit /b 1
 )
 
@@ -78,4 +75,3 @@ echo   run.bat --list-servers     - List configured servers
 echo   run.bat --help             - Show all options
 echo =========================================================
 echo.
-pause

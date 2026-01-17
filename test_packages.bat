@@ -9,7 +9,6 @@ SET PYTHON_EXE=%SCRIPT_DIR%\python\python.exe
 
 IF NOT EXIST "%PYTHON_EXE%" (
     echo ERROR: Embedded Python not found!
-    pause
     exit /b 1
 )
 

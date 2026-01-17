@@ -50,25 +50,43 @@
    注意：以 # 開頭的行會視為註解並忽略
 
 
-2. 批次 + 傳輸包裝（分批下載、壓縮、傳輸）
+2. 批次 + 傳輸包裝（分批下載、壓縮/直傳、傳輸）
    依病例數分批下載（預設每批 20 筆），每批完成後：
-   1) 將 GENERAL 內所有資料夾壓成 zip
-   2) 刪除 GENERAL 內原始資料
-   3) 透過 FuTransfer 傳送 zip
-   4) 傳送成功後刪除 zip，繼續下一批
+   - zip 模式（預設）：
+     1) 將 GENERAL 內所有資料夾壓成 zip
+     2) 刪除 GENERAL 內原始資料
+     3) 透過 FuTransfer 傳送 zip
+     4) 傳送成功後刪除 zip，繼續下一批
+   - direct 模式（FuTransfer 直傳）：
+     1) 直接透過 FuTransfer 傳送 GENERAL
+     2) 傳送成功後再清空 GENERAL
 
    執行方式：
    > run_with_transfer.bat queries.csv --transfer-server 192.168.1.100
    > run_with_transfer.bat C:\case_lists --transfer-server 192.168.1.100
+   > run_with_transfer.bat queries.csv --transfer-server 192.168.1.100 --transfer-mode direct
+   > run_with_transfer.bat queries.csv --transfer-server 192.168.1.100 --transfer-protocol batch
 
    說明：
    - FuTransfer 預設位於 C:\FuTransfer（可用 --transfer-root 指定）
    - GENERAL 路徑預設取自 config.yaml 的 move_destination.storage_path
    - 其他參數會直接傳給 dicom_downloader（例如 --timeout 180）
    - 每批大小可用 --batch-size 變更（例如 --batch-size 20）
-   - Zip 暫存資料夾預設為 transfer_zips（可用 --zip-root 指定）
-   - 成功傳輸後會刪除 zip（可用 --keep-zip 保留）
+   - 轉送模式可用 --transfer-mode zip|direct 切換（預設 zip）
+   - FuTransfer 預設 protocol 為 HTTP（可用 --transfer-protocol http|batch）
+   - HTTP 上傳預設埠：8080；批次串流預設埠：443（可用 --transfer-port 覆寫）
+   - FuTransfer 壓縮可用 --transfer-compression gz|none（批次串流用）
+   - HTTP 續傳設定：--transfer-no-resume / --transfer-clear-state
+   - --transfer-http 為相容舊參數（等同 --transfer-protocol http）
+   - Zip 暫存資料夾預設為 transfer_zips（zip 模式可用 --zip-root 指定）
+   - 成功傳輸後會刪除 zip（zip 模式可用 --keep-zip 保留）
    - 可用 --no-clear 跳過清空 GENERAL（不建議）
+   - 批次暫存 CSV 會定時清理（預設 24 小時，可用 --tmp-cleanup-hours / --cleanup-interval-minutes 調整）
+   - Zip 暫存可選擇定時清理（--zip-cleanup-hours）
+   - FuTransfer 伺服器端會定時清理 output 下的 .temp（可於 FuTransfer 的 transfer_config.py 調整）
+   - 監控畫面：預設 http://localhost:8081（可用 --monitor-host / --monitor-port / --no-monitor 調整）
+   - 完成後自動關機：--shutdown-after（預設成功才關機，可用 --shutdown-on-error 強制）
+   - 關機延遲秒數：--shutdown-delay 60（可用 "shutdown /a" 取消）
 
 
 3. 單筆查詢

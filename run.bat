@@ -18,7 +18,6 @@ IF EXIST "%SCRIPT_DIR%\python\python.exe" (
 ) ELSE (
     echo ERROR: Embedded Python not found!
     echo Please ensure the python folder is in the same directory as this script.
-    pause
     exit /b 1
 )
 

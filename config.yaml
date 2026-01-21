@@ -2,38 +2,44 @@
 # Edit this file to add or modify DICOM server connections
 
 settings:
-  query_timeout: 30          # Timeout for C-FIND queries (seconds)
-  download_timeout: 120      # Timeout for C-MOVE downloads (seconds)
-  max_retries: 2            # Number of retries before skipping
-  log_level: INFO           # Log level: DEBUG, INFO, WARNING, ERROR
+  query_timeout: 30 # Timeout for C-FIND queries (seconds)
+  download_timeout: 120 # Timeout for C-MOVE downloads (seconds)
+  max_retries: 2 # Number of retries before skipping
+  log_level: INFO # Log level: DEBUG, INFO, WARNING, ERROR
 
 # Define your DICOM servers here
 servers:
-  LK0:
-    port: 4100
-    ip: "10.30.191.120"
-    ae_title: "GEPACS"
-    description: "LK PACS Server"
-
   LK:
     port: 104
     ip: "10.30.190.52"
     ae_title: "CGHLEA3"
     description: "LK PACS Server LTA"
 
-  TY:
+  LK1:
     port: 4100
-    ip: "10.31.191.120"
+    ip: "10.30.191.120"
     ae_title: "GEPACS"
-    description: "TY PACS Server"
+    description: "LK PACS Server"
 
-  TY1:
+  TY:
     port: 104
     ip: "10.31.191.52"
     ae_title: "CGHHEA2"
     description: "TY PACS Server LTA"
 
+  TY1:
+    port: 4100
+    ip: "10.31.191.120"
+    ae_title: "GEPACS"
+    description: "TY PACS Server"
+
   KL:
+    port: 104
+    ip: "10.26.191.53"
+    ae_title: "CGHKEA3"
+    description: "KL PACS Server LTA"
+
+  KL1:
     port: 4100
     ip: "10.26.191.150"
     ae_title: "GEPACS"
@@ -44,6 +50,18 @@ servers:
     ip: "10.40.191.120"
     ae_title: "GEPACS"
     description: "KL PACS Server"
+
+  TP:
+    port: 104
+    ip: "10.29.191.53"
+    ae_title: "CGHTEA4"
+    description: "TP PACS Server LTA"
+
+  CH:
+    port: 4100
+    ip: "10.48.190.30"
+    ae_title: "GEPACS"
+    description: "CH PACS Server"
 
   # Add more servers as needed:
   # SERVER_NAME:

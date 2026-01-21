@@ -68,7 +68,14 @@ class DICOMDownloader:
         console_handler.setFormatter(logging.Formatter(log_format))
 
         # File handler
-        log_file = Path('logs') / f"dicom_download_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_dir = Path('logs')
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Could not create log directory '{log_dir}': {e}")
+            log_dir = Path('.')
+
+        log_file = log_dir / f"dicom_download_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(logging.Formatter(log_format))
 
@@ -150,7 +157,8 @@ class DICOMDownloader:
         ds.QueryRetrieveLevel = 'STUDY'
         ds.PatientID = patient_id
         ds.StudyDate = study_date.replace('-', '')  # Convert YYYY-MM-DD to YYYYMMDD
-        ds.Modality = modality  # Use modality as-is (no wildcard needed for exact match)
+        if modality:
+            ds.Modality = modality  # Use modality as-is (no wildcard needed for exact match)
         ds.StudyInstanceUID = ''  # Request this field to be returned
         ds.PatientName = ''
         ds.StudyDescription = ''
@@ -196,20 +204,191 @@ class DICOMDownloader:
         return matching_studies
 
 
-    def process_query(self, patient_id, study_date, modality, server_name):
-        """Process a single query"""
-        if server_name not in self.config['servers']:
-            self.logger.error(f"Server '{server_name}' not found in configuration")
+    def _resolve_server_name(self, server_name: Optional[str]) -> Optional[str]:
+        """Resolve server name with case-insensitive matching."""
+        if not server_name:
+            return None
+        server_name = server_name.strip()
+        if not server_name:
+            return None
+        if server_name in self.config['servers']:
+            return server_name
+        for configured_name in self.config['servers']:
+            if configured_name.lower() == server_name.lower():
+                return configured_name
+        return server_name
+
+    def _expand_server_chain(self, server_name: Optional[str]) -> List[str]:
+        """Expand server name to include numeric fallbacks (e.g., LK -> LK1, LK2)."""
+        resolved = self._resolve_server_name(server_name)
+        if not resolved:
+            return []
+
+        candidates = [resolved]
+        base_lower = resolved.lower()
+        suffixes = []
+
+        for configured_name in self.config['servers']:
+            if configured_name.lower().startswith(base_lower) and configured_name.lower() != base_lower:
+                remainder = configured_name[len(resolved):]
+                if remainder.isdigit():
+                    suffixes.append((int(remainder), configured_name))
+
+        for _, name in sorted(suffixes):
+            candidates.append(name)
+
+        return candidates
+
+    def _dedupe_servers(self, servers: List[str]) -> List[str]:
+        seen = set()
+        deduped = []
+        for server in servers:
+            if server and server not in seen:
+                deduped.append(server)
+                seen.add(server)
+        return deduped
+
+    def build_modality_candidates(
+        self,
+        primary_modality: Optional[str],
+        alt_modalities: Optional[List[str]] = None
+    ) -> List[Optional[str]]:
+        candidates: List[Optional[str]] = []
+
+        def add_modality(value: Optional[str]) -> None:
+            if value is None:
+                return
+            value = str(value).strip()
+            if not value:
+                return
+            key = value.lower()
+            if key not in seen:
+                candidates.append(value)
+                seen.add(key)
+
+        seen = set()
+        add_modality(primary_modality)
+        if alt_modalities:
+            for alt in alt_modalities:
+                add_modality(alt)
+
+        return candidates or [primary_modality]
+
+    def build_server_candidates(
+        self,
+        primary_server: Optional[str],
+        lookup_servers: Optional[List[str]] = None
+    ) -> List[str]:
+        candidates = []
+        if primary_server:
+            candidates.extend(self._expand_server_chain(primary_server))
+
+        if lookup_servers:
+            lookup_servers = [value for value in lookup_servers if value]
+            lookup_all = any(value.lower() == 'all' for value in lookup_servers)
+            bases = list(self.config['servers'].keys()) if lookup_all else lookup_servers
+
+            for base in bases:
+                candidates.extend(self._expand_server_chain(base))
+
+        return self._dedupe_servers(candidates)
+
+    def process_query_with_lookup(
+        self,
+        patient_id,
+        study_date,
+        modality,
+        server_name: Optional[str],
+        lookup_servers: Optional[List[str]] = None,
+        alt_modalities: Optional[List[str]] = None
+    ):
+        candidates = self.build_server_candidates(server_name, lookup_servers)
+        modality_candidates = self.build_modality_candidates(modality, alt_modalities)
+        if not candidates:
+            reason = "No servers available for lookup"
+            self.logger.error(reason)
             self.failed_downloads.append({
                 'patient_id': patient_id,
                 'date': study_date,
                 'modality': modality,
-                'server': server_name,
-                'reason': 'Server not configured',
+                'server': server_name or 'lookup',
+                'reason': reason,
                 'timestamp': datetime.now().isoformat()
             })
             return False
 
+        if lookup_servers or len(candidates) > 1:
+            self.logger.info(f"Lookup order (servers): {', '.join(candidates)}")
+        if alt_modalities:
+            self.logger.info(f"Lookup order (modalities): {', '.join(modality_candidates)}")
+
+        last_reason = None
+        total_attempts = len(candidates) * len(modality_candidates)
+        attempt = 0
+        for server_index, candidate in enumerate(candidates, 1):
+            for modality_index, modality_value in enumerate(modality_candidates, 1):
+                attempt += 1
+                modality_label = modality_value or "ANY"
+                self.logger.info(
+                    f"Lookup attempt {attempt}/{total_attempts}: "
+                    f"{candidate} (modality {modality_label})"
+                )
+                success, reason = self.process_query(
+                    patient_id,
+                    study_date,
+                    modality_value,
+                    candidate,
+                    record_failure=False
+                )
+                if success:
+                    return True
+                last_reason = reason
+
+        failure_reason = last_reason or "All lookup attempts failed"
+        modality_list = ', '.join(str(value) for value in modality_candidates if value)
+        modality_suffix = f"; modalities [{modality_list}]" if modality_list else ""
+        self.failed_downloads.append({
+            'patient_id': patient_id,
+            'date': study_date,
+            'modality': modality,
+            'server': server_name or 'lookup',
+            'reason': f"{failure_reason}; tried {', '.join(candidates)}{modality_suffix}",
+            'timestamp': datetime.now().isoformat()
+        })
+        return False
+
+    def process_query(self, patient_id, study_date, modality, server_name, record_failure=True):
+        """Process a single query"""
+        if not server_name:
+            reason = "Server not specified"
+            self.logger.error(reason)
+            if record_failure:
+                self.failed_downloads.append({
+                    'patient_id': patient_id,
+                    'date': study_date,
+                    'modality': modality,
+                    'server': server_name or 'unknown',
+                    'reason': reason,
+                    'timestamp': datetime.now().isoformat()
+                })
+            return False, reason
+
+        resolved_name = self._resolve_server_name(server_name)
+        if resolved_name not in self.config['servers']:
+            reason = 'Server not configured'
+            self.logger.error(f"Server '{server_name}' not found in configuration")
+            if record_failure:
+                self.failed_downloads.append({
+                    'patient_id': patient_id,
+                    'date': study_date,
+                    'modality': modality,
+                    'server': server_name,
+                    'reason': reason,
+                    'timestamp': datetime.now().isoformat()
+                })
+            return False, reason
+
+        server_name = resolved_name
         server_config = self.config['servers'][server_name]
 
         self.logger.info(f"Processing: Patient={patient_id}, Date={study_date}, Modality={modality}, Server={server_name}")
@@ -218,20 +397,23 @@ class DICOMDownloader:
         studies = self.query_studies(server_config, patient_id, study_date, modality)
 
         if not studies:
-            self.logger.warning(f"No matching studies found")
-            self.failed_downloads.append({
-                'patient_id': patient_id,
-                'date': study_date,
-                'modality': modality,
-                'server': server_name,
-                'reason': 'No matching studies found',
-                'timestamp': datetime.now().isoformat()
-            })
-            return False
+            reason = 'No matching studies found'
+            self.logger.warning(reason)
+            if record_failure:
+                self.failed_downloads.append({
+                    'patient_id': patient_id,
+                    'date': study_date,
+                    'modality': modality,
+                    'server': server_name,
+                    'reason': reason,
+                    'timestamp': datetime.now().isoformat()
+                })
+            return False, reason
 
         # Send C-MOVE for each study
         all_successful = True
         studies_moved = []
+        failed_studies = []
 
         for study in studies:
             study_uid = study['StudyInstanceUID']
@@ -253,14 +435,16 @@ class DICOMDownloader:
                 self.logger.info(f"C-MOVE request sent successfully for study {study_uid}")
                 self.logger.info(f"Study should be available at: {storage_path}")
             else:
-                self.failed_downloads.append({
-                    'patient_id': patient_id,
-                    'date': study_date,
-                    'modality': modality,
-                    'server': server_name,
-                    'reason': f'C-MOVE failed for study {study_uid}',
-                    'timestamp': datetime.now().isoformat()
-                })
+                failed_studies.append(study_uid)
+                if record_failure:
+                    self.failed_downloads.append({
+                        'patient_id': patient_id,
+                        'date': study_date,
+                        'modality': modality,
+                        'server': server_name,
+                        'reason': f'C-MOVE failed for study {study_uid}',
+                        'timestamp': datetime.now().isoformat()
+                    })
                 all_successful = False
 
         if all_successful and studies_moved:
@@ -273,9 +457,18 @@ class DICOMDownloader:
                 'timestamp': datetime.now().isoformat()
             })
 
-        return all_successful
+        if not all_successful:
+            reason = f"C-MOVE failed for {len(failed_studies)} of {len(studies)} studies"
+            return False, reason
 
-    def process_batch(self, csv_file):
+        return True, None
+
+    def process_batch(
+        self,
+        csv_file,
+        lookup_servers: Optional[List[str]] = None,
+        alt_modalities: Optional[List[str]] = None
+    ):
         """Process batch queries from CSV file"""
         self.logger.info(f"Processing batch file: {csv_file}")
 
@@ -331,11 +524,22 @@ class DICOMDownloader:
                         modality = get_field(row, normalized_fields.get('modality'))
                         server = get_field(row, normalized_fields.get('server'))
 
-                        if not all([patient_id, study_date, modality, server]):
+                        if not all([patient_id, study_date, modality]):
                             self.logger.warning(f"Skipping row with missing fields: {row}")
                             continue
 
-                        self.process_query_with_inline_server(patient_id, study_date, modality, server)
+                        if not server and not lookup_servers:
+                            self.logger.warning(f"Skipping row with missing server: {row}")
+                            continue
+
+                        self.process_query_with_inline_server(
+                            patient_id,
+                            study_date,
+                            modality,
+                            server,
+                            lookup_servers=lookup_servers,
+                            alt_modalities=alt_modalities
+                        )
                 else:
                     reader = csv.reader(f, skipinitialspace=True)
                     for row in reader:
@@ -343,12 +547,25 @@ class DICOMDownloader:
                         if not row or str(row[0]).strip().startswith('#'):
                             continue
 
-                        if len(row) < 4:
+                        if len(row) < 3:
                             self.logger.warning(f"Invalid row format: {row}")
                             continue
 
-                        patient_id, study_date, modality, server = [x.strip() for x in row[:4]]
-                        self.process_query_with_inline_server(patient_id, study_date, modality, server)
+                        patient_id, study_date, modality = [x.strip() for x in row[:3]]
+                        server = row[3].strip() if len(row) > 3 else None
+
+                        if not server and not lookup_servers:
+                            self.logger.warning(f"Skipping row with missing server: {row}")
+                            continue
+
+                        self.process_query_with_inline_server(
+                            patient_id,
+                            study_date,
+                            modality,
+                            server,
+                            lookup_servers=lookup_servers,
+                            alt_modalities=alt_modalities
+                        )
 
         except Exception as e:
             self.logger.error(f"Error processing batch file: {e}")
@@ -484,24 +701,41 @@ class DICOMDownloader:
 
         return True
 
-    def process_query_with_inline_server(self, patient_id, study_date, modality, server_spec):
+    def process_query_with_inline_server(
+        self,
+        patient_id,
+        study_date,
+        modality,
+        server_spec: Optional[str],
+        lookup_servers: Optional[List[str]] = None,
+        alt_modalities: Optional[List[str]] = None
+    ):
         """Process query with inline server specification"""
-        # Check if server_spec contains inline server info (has | separator)
-        if '|' in server_spec:
-            parts = server_spec.split('|')
-            if len(parts) >= 4:
-                server_name = parts[0].strip()
-                server_info = {
-                    'ip': parts[1].strip(),
-                    'ae_title': parts[2].strip(),
-                    'port': int(parts[3].strip())
-                }
-                # Add server temporarily (don't save)
-                self.add_server(server_name, server_info, save=False)
-                return self.process_query(patient_id, study_date, modality, server_name)
+        server_name = None
+        if server_spec:
+            # Check if server_spec contains inline server info (has | separator)
+            if '|' in server_spec:
+                parts = server_spec.split('|')
+                if len(parts) >= 4:
+                    server_name = parts[0].strip()
+                    server_info = {
+                        'ip': parts[1].strip(),
+                        'ae_title': parts[2].strip(),
+                        'port': int(parts[3].strip())
+                    }
+                    # Add server temporarily (don't save)
+                    self.add_server(server_name, server_info, save=False)
+            else:
+                server_name = server_spec.strip()
 
-        # Otherwise treat as normal server name
-        return self.process_query(patient_id, study_date, modality, server_spec)
+        return self.process_query_with_lookup(
+            patient_id,
+            study_date,
+            modality,
+            server_name,
+            lookup_servers=lookup_servers,
+            alt_modalities=alt_modalities
+        )
 
 
 def main():
@@ -512,6 +746,16 @@ def main():
     parser.add_argument('--date', help='Study date (YYYY-MM-DD)')
     parser.add_argument('--modality', help='Modality (CT, MR, MG, etc.)')
     parser.add_argument('--server', help='Server name from config')
+    parser.add_argument(
+        '--lookup',
+        nargs='+',
+        help='Try fallback servers in order. Use "all" or list servers (e.g. --lookup LK TY).'
+    )
+    parser.add_argument(
+        '--alt-modality',
+        nargs='+',
+        help='Fallback modality values to try in order (e.g. --alt-modality CR US).'
+    )
     parser.add_argument('--timeout', type=int, help='Override download timeout (seconds)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--add-server', help='Add server (format: "Name:IP:AETitle:Port" or paste server info)')
@@ -607,9 +851,20 @@ def main():
 
     # Process queries
     if args.batch:
-        downloader.process_batch(args.batch)
-    elif args.id and args.date and args.modality and args.server:
-        downloader.process_query(args.id, args.date, args.modality, args.server)
+        downloader.process_batch(
+            args.batch,
+            lookup_servers=args.lookup,
+            alt_modalities=args.alt_modality
+        )
+    elif args.id and args.date and args.modality and (args.server or args.lookup):
+        downloader.process_query_with_lookup(
+            args.id,
+            args.date,
+            args.modality,
+            args.server,
+            lookup_servers=args.lookup,
+            alt_modalities=args.alt_modality
+        )
     else:
         # Interactive mode
         print("\n" + "=" * 50)
@@ -620,6 +875,10 @@ def main():
             print(f"  {name}: {config['description']}")
 
         print("\nEnter query details (or 'quit' to exit):")
+        if args.lookup:
+            print(f"Lookup enabled (servers): {', '.join(args.lookup)}")
+        if args.alt_modality:
+            print(f"Lookup enabled (modalities): {', '.join(args.alt_modality)}")
 
         while True:
             try:
@@ -630,8 +889,20 @@ def main():
                 study_date = input("Study Date (YYYY-MM-DD): ").strip()
                 modality = input("Modality (CT/MR/MG/etc.): ").strip().upper()
                 server = input("Server name: ").strip()
+                if not server:
+                    if not args.lookup:
+                        print("Server name is required unless --lookup is specified.")
+                        continue
+                    server = None
 
-                downloader.process_query(patient_id, study_date, modality, server)
+                downloader.process_query_with_lookup(
+                    patient_id,
+                    study_date,
+                    modality,
+                    server,
+                    lookup_servers=args.lookup,
+                    alt_modalities=args.alt_modality
+                )
 
                 another = input("\nProcess another query? (y/n): ").strip().lower()
                 if another != 'y':
